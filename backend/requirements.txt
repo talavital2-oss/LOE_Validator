@@ -1,0 +1,24 @@
+# FastAPI and server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Document parsing
+python-docx==1.1.0
+pdfplumber==0.10.3
+openpyxl==3.1.2
+
+# Pydantic for data validation
+pydantic==2.5.3
+
+# Anthropic Claude API
+anthropic==0.18.1
+
+# CORS support
+starlette==0.35.1
+
+# Fuzzy string matching (used by validator)
+rapidfuzz==3.6.1
+
+# For report generation
+Pillow==10.2.0
