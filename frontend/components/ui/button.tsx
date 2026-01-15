@@ -4,20 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default:
-          "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-xl hover:shadow-brand-500/30 hover:from-brand-400 hover:to-brand-500",
+        default: "text-white shadow-lg hover:shadow-xl",
         destructive:
           "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/30",
         outline:
-          "border-2 border-terasky-200 bg-white hover:bg-terasky-50 hover:border-brand-400 text-terasky-800",
-        secondary:
-          "bg-terasky-100 text-terasky-800 hover:bg-terasky-200",
-        ghost:
-          "hover:bg-terasky-100 hover:text-terasky-900",
+          "border-2 border-terasky-200 bg-white hover:bg-terasky-50 text-terasky-800",
+        secondary: "bg-terasky-100 text-terasky-800 hover:bg-terasky-200",
+        ghost: "hover:bg-terasky-100 hover:text-terasky-900",
         link: "text-brand-500 underline-offset-4 hover:underline",
       },
       size: {
@@ -41,12 +38,23 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, style, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+    
+    // Apply orange gradient inline for default variant to ensure it works
+    const defaultStyle = variant === "default" || variant === undefined
+      ? {
+          background: "linear-gradient(to right, #ef7b59, #e35a34)",
+          boxShadow: "0 10px 15px -3px rgba(239, 123, 89, 0.25)",
+          ...style,
+        }
+      : style;
+    
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
+        style={defaultStyle}
         {...props}
       />
     );

@@ -27,7 +27,13 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+                    style={{ 
+                      background: "linear-gradient(to bottom right, #ef7b59, #e35a34)",
+                      boxShadow: "0 10px 15px -3px rgba(239, 123, 89, 0.2)"
+                    }}
+                  >
                     <svg
                       className="w-6 h-6 text-white"
                       fill="none"
@@ -114,7 +120,7 @@ export default function RootLayout({
 
           {/* Footer */}
           <footer className="py-6 text-center text-sm text-terasky-400 border-t border-terasky-100">
-            <p>LOE Validator &copy; 2024 TeraSky</p>
+            <p>LOE Validator &copy; 2026 TeraSky</p>
           </footer>
         </div>
       </body>

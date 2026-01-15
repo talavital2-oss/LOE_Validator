@@ -53,7 +53,7 @@ export function getMatchStatusColor(
     case "exact":
       return "text-green-600 bg-green-100";
     case "fuzzy":
-      return "text-blue-600 bg-blue-100";
+      return "text-brand-600 bg-brand-100";
     case "unmatched":
       return "text-red-600 bg-red-100";
     case "orphaned":

@@ -16,6 +16,80 @@
     --background-start-rgb: 24, 25, 30;
     --background-end-rgb: 40, 42, 50;
   }
+  
+  /* Dark mode text color overrides */
+  .text-terasky-800 {
+    color: #e2e3e5 !important;
+  }
+  .text-terasky-700 {
+    color: #c4c6cb !important;
+  }
+  .text-terasky-600 {
+    color: #9fa2a9 !important;
+  }
+  .text-terasky-500 {
+    color: #7a7e87 !important;
+  }
+  
+  /* Ensure brand colors stay orange in dark mode */
+  .text-brand-600 {
+    color: #ef7b59 !important;
+  }
+  .text-brand-500 {
+    color: #ef7b59 !important;
+  }
+  .bg-brand-500 {
+    background-color: #ef7b59 !important;
+  }
+  .bg-brand-600 {
+    background-color: #e35a34 !important;
+  }
+  .from-brand-500 {
+    --tw-gradient-from: #ef7b59 var(--tw-gradient-from-position) !important;
+  }
+  .to-brand-600 {
+    --tw-gradient-to: #e35a34 var(--tw-gradient-to-position) !important;
+  }
+  .from-brand-400 {
+    --tw-gradient-from: #f39a7f var(--tw-gradient-from-position) !important;
+  }
+  .to-brand-500 {
+    --tw-gradient-to: #ef7b59 var(--tw-gradient-to-position) !important;
+  }
+  
+  /* Card backgrounds in dark mode */
+  .bg-white\/90 {
+    background-color: rgba(40, 42, 50, 0.9) !important;
+  }
+  .bg-white {
+    background-color: #282a32 !important;
+  }
+  .bg-terasky-50 {
+    background-color: rgba(45, 45, 63, 0.3) !important;
+  }
+  .bg-terasky-100 {
+    background-color: rgba(45, 45, 63, 0.5) !important;
+  }
+  .bg-brand-50 {
+    background-color: rgba(239, 123, 89, 0.1) !important;
+  }
+  .bg-brand-100 {
+    background-color: rgba(239, 123, 89, 0.2) !important;
+  }
+  
+  /* Border colors in dark mode */
+  .border-terasky-100 {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  .border-terasky-200 {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+  }
+  .border-brand-100 {
+    border-color: rgba(239, 123, 89, 0.2) !important;
+  }
+  .border-brand-200 {
+    border-color: rgba(239, 123, 89, 0.3) !important;
+  }
 }
 
 body {
@@ -121,4 +195,20 @@ body {
 *:focus-visible {
   outline: 2px solid rgba(239, 123, 89, 0.5);
   outline-offset: 2px;
+}
+
+/* Force orange gradient on primary buttons */
+button[class*="from-brand"] {
+  background-image: linear-gradient(to right, #ef7b59, #e35a34) !important;
+}
+
+/* Shadow colors for brand */
+.shadow-brand-500\/25 {
+  --tw-shadow-color: rgba(239, 123, 89, 0.25) !important;
+}
+.shadow-brand-500\/20 {
+  --tw-shadow-color: rgba(239, 123, 89, 0.2) !important;
+}
+.shadow-brand-500\/30 {
+  --tw-shadow-color: rgba(239, 123, 89, 0.3) !important;
 }

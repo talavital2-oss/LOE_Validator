@@ -114,28 +114,33 @@ export default function Home() {
             <React.Fragment key={s.id}>
               <div className="flex items-center">
                 <div
-                  className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors"
+                  style={
                     i <= currentStepIndex
-                      ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/20"
-                      : "bg-terasky-100 text-terasky-400"
-                  )}
+                      ? {
+                          background: "linear-gradient(to right, #ef7b59, #e35a34)",
+                          color: "white",
+                          boxShadow: "0 10px 15px -3px rgba(239, 123, 89, 0.2)",
+                        }
+                      : {
+                          backgroundColor: "rgba(45, 45, 63, 0.3)",
+                          color: "#7a7e87",
+                        }
+                  }
                 >
                   {i + 1}
                 </div>
                 <span
-                  className={cn(
-                    "ml-2 text-sm hidden sm:inline",
-                    i <= currentStepIndex
-                      ? "text-brand-600 font-medium"
-                      : "text-terasky-400"
-                  )}
+                  className="ml-2 text-sm hidden sm:inline font-medium"
+                  style={{
+                    color: i <= currentStepIndex ? "#ef7b59" : "#7a7e87",
+                  }}
                 >
                   {s.label}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <ChevronRight className="w-5 h-5 mx-2 text-terasky-200" />
+                <ChevronRight className="w-5 h-5 mx-2" style={{ color: "#4b4e56" }} />
               )}
             </React.Fragment>
           ))}
