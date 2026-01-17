@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, Accept } from "react-dropzone";
 import { FileText, FileSpreadsheet, Upload, X, Check } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { uploadFile, UploadResponse } from "@/lib/api";
@@ -22,7 +22,7 @@ export function FileDropzone({
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const acceptedTypes =
+  const acceptedTypes: Accept =
     type === "sow"
       ? {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
