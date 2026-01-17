@@ -34,7 +34,8 @@ export function ColumnMappingDialog({
 
         // Auto-detect columns based on common names
         const autoMapping: Partial<ColumnMapping> = {};
-        for (const col of data.columns) {
+        for (const col of data.columns || []) {
+          if (!col || !col.name) continue;
           const nameLower = col.name.toLowerCase();
           if (
             nameLower.includes("task") ||
@@ -156,10 +157,10 @@ export function ColumnMappingDialog({
               className="w-full h-10 px-3 rounded-lg border border-terasky-200 bg-white text-terasky-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option value="">Select column...</option>
-              {preview?.columns.map((col) => (
+              {preview?.columns?.filter(col => col && col.name).map((col) => (
                 <option key={col.name} value={col.name}>
                   {col.name}
-                  {col.sample_values.length > 0 &&
+                  {col.sample_values?.length > 0 &&
                     ` (e.g., "${col.sample_values[0]}")`}
                 </option>
               ))}
@@ -179,10 +180,10 @@ export function ColumnMappingDialog({
               className="w-full h-10 px-3 rounded-lg border border-terasky-200 bg-white text-terasky-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option value="">Select column...</option>
-              {preview?.columns.map((col) => (
+              {preview?.columns?.filter(col => col && col.name).map((col) => (
                 <option key={col.name} value={col.name}>
                   {col.name}
-                  {col.sample_values.length > 0 &&
+                  {col.sample_values?.length > 0 &&
                     ` (e.g., "${col.sample_values[0]}")`}
                 </option>
               ))}
@@ -206,7 +207,7 @@ export function ColumnMappingDialog({
               className="w-full h-10 px-3 rounded-lg border border-terasky-200 bg-white text-terasky-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option value="">None</option>
-              {preview?.columns.map((col) => (
+              {preview?.columns?.filter(col => col && col.name).map((col) => (
                 <option key={col.name} value={col.name}>
                   {col.name}
                 </option>
@@ -231,7 +232,7 @@ export function ColumnMappingDialog({
               className="w-full h-10 px-3 rounded-lg border border-terasky-200 bg-white text-terasky-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option value="">None</option>
-              {preview?.columns.map((col) => (
+              {preview?.columns?.filter(col => col && col.name).map((col) => (
                 <option key={col.name} value={col.name}>
                   {col.name}
                 </option>
@@ -256,7 +257,7 @@ export function ColumnMappingDialog({
               className="w-full h-10 px-3 rounded-lg border border-terasky-200 bg-white text-terasky-800 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
             >
               <option value="">None (use Days column)</option>
-              {preview?.columns.map((col) => (
+              {preview?.columns?.filter(col => col && col.name).map((col) => (
                 <option key={col.name} value={col.name}>
                   {col.name}
                 </option>

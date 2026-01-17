@@ -94,18 +94,243 @@ export async function POST(request: NextRequest) {
 
 // SOW Parsing Functions
 async function parseSOWDocx(buffer: Buffer): Promise<SOWTask[]> {
-  const result = await mammoth.extractRawText({ buffer });
-  const text = result.value;
+  // Convert DOCX to HTML to preserve table structure
+  const result = await mammoth.convertToHtml({ buffer });
+  const html = result.value;
 
   const tasks: SOWTask[] = [];
-  const lines = text.split("\n").filter((line) => line.trim());
+  let currentPhase = "General";
 
+  // Find the Implementation or Scope of Work section
+  // Look for headings that indicate this section
+  const sectionStartPatterns = [
+    /<(?:h[1-4]|p|strong)[^>]*>[^<]*(?:implementation|scope\s*of\s*work|project\s*scope|technical\s*scope)[^<]*<\/(?:h[1-4]|p|strong)>/gi,
+  ];
+
+  let implementationStart = -1;
+  for (const pattern of sectionStartPatterns) {
+    const match = pattern.exec(html);
+    if (match) {
+      implementationStart = match.index;
+      break;
+    }
+  }
+
+  // Also try to find by looking for "Implementation" text before a table
+  if (implementationStart === -1) {
+    const implMatch = html.match(/implementation/i);
+    if (implMatch && implMatch.index !== undefined) {
+      implementationStart = implMatch.index;
+    }
+  }
+
+  // Find the section to parse - from Implementation heading to next major section or end
+  let sectionHtml = html;
+  if (implementationStart !== -1) {
+    // Get content from Implementation section onwards
+    sectionHtml = html.substring(implementationStart);
+    
+    // Try to find where this section ends (next major heading)
+    const nextSectionMatch = sectionHtml.substring(100).match(/<h[1-3][^>]*>[^<]*(appendix|references|terms|conditions|pricing|commercial|assumptions|exclusions|sign-?off|acceptance)<\/h[1-3]>/i);
+    if (nextSectionMatch && nextSectionMatch.index !== undefined) {
+      sectionHtml = sectionHtml.substring(0, nextSectionMatch.index + 100);
+    }
+  }
+
+  // Extract tables from the Implementation section only
+  const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+  const tables = sectionHtml.match(tableRegex) || [];
+
+  // Find the main scope/tasks table (usually has Phase, Task, Description columns)
+  for (const tableHtml of tables) {
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    const rows = tableHtml.match(rowRegex) || [];
+    
+    if (rows.length < 2) continue; // Skip tables with less than 2 rows
+
+    // Check if this looks like a scope/tasks table by examining the header row
+    let isTaskTable = false;
+    let taskColIndex = -1;
+    let phaseColIndex = -1;
+    let descColIndex = -1;
+    let ownerColIndex = -1;
+
+    if (rows[0]) {
+      const headerCells = extractCellsFromRow(rows[0]);
+      console.log("Table headers found:", headerCells);
+      
+      for (let i = 0; i < headerCells.length; i++) {
+        const header = headerCells[i].toLowerCase().trim();
+        
+        // Phase column - first priority
+        if (header === 'phase' || header.includes('phase')) {
+          phaseColIndex = i;
+          isTaskTable = true;
+        }
+        // Project Task column - this is the task NAME (not description)
+        else if (header === 'project task' || header === 'task name' || header === 'activity') {
+          taskColIndex = i;
+          isTaskTable = true;
+        }
+        // Task Description column - this is the detailed description
+        else if (header.includes('description') || header.includes('detail')) {
+          descColIndex = i;
+        }
+        // Generic "task" header - could be task name if no description column yet
+        else if (header === 'task' && taskColIndex === -1) {
+          // If we later find a description column, this becomes the task name
+          taskColIndex = i;
+          isTaskTable = true;
+        }
+        // Owner column
+        else if (header.includes('owner') || header.includes('responsible') || header.includes('party')) {
+          ownerColIndex = i;
+        }
+      }
+      
+      // If we found "task" but also have description, task is the name column
+      // If we found "task description" but no separate task column, look for "project task"
+      if (taskColIndex === -1 && descColIndex >= 0) {
+        // The description column might actually be task descriptions
+        // Look for a shorter column before it as the task name
+        for (let i = 0; i < descColIndex; i++) {
+          const header = headerCells[i].toLowerCase().trim();
+          if (header && !header.includes('phase') && !header.includes('#')) {
+            taskColIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    // If no explicit task column found but table has Phase column and multiple columns
+    if (phaseColIndex >= 0 && taskColIndex === -1 && rows.length >= 3) {
+      // Assume the column after Phase is the task name
+      taskColIndex = phaseColIndex + 1;
+      if (descColIndex === -1 && taskColIndex + 1 < (rows[0] ? extractCellsFromRow(rows[0]).length : 0)) {
+        descColIndex = taskColIndex + 1;
+      }
+      isTaskTable = true;
+    }
+
+    if (!isTaskTable) continue;
+    
+    console.log(`Parsing table - Phase col: ${phaseColIndex}, Task col: ${taskColIndex}, Desc col: ${descColIndex}, Owner col: ${ownerColIndex}`);
+
+    // Parse task rows (skip header)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+      
+      const cells = extractCellsFromRow(row);
+      if (cells.length === 0) continue;
+
+      // Handle phase rows (merged cells spanning the whole row)
+      const nonEmptyCells = cells.filter(c => c && c.trim());
+      if (nonEmptyCells.length === 1 && cells.length >= 2) {
+        // This is likely a phase header row (merged cells)
+        const phaseText = nonEmptyCells[0].trim();
+        if (phaseText && phaseText.length > 3 && phaseText.length < 150) {
+          currentPhase = phaseText;
+          console.log(`Found phase: ${currentPhase}`);
+        }
+        continue;
+      }
+
+      // Update phase from phase column if present and has value
+      if (phaseColIndex >= 0 && cells[phaseColIndex]) {
+        const phaseVal = cells[phaseColIndex].trim();
+        if (phaseVal && phaseVal.length > 2) {
+          currentPhase = phaseVal;
+        }
+      }
+
+      // Get task name from "Project Task" column (NOT the description!)
+      let taskText = "";
+      if (taskColIndex >= 0 && cells[taskColIndex]) {
+        taskText = cells[taskColIndex].trim();
+      }
+      
+      // Skip if no task name found
+      if (!taskText || taskText.length < 3) continue;
+      
+      // Skip if task looks like a number or header
+      if (/^\d+(\.\d+)?$/.test(taskText)) continue;
+      if (/^(phase|task|#|no\.?|item)/i.test(taskText)) continue;
+
+      // Get description from description column
+      let description = taskText;
+      if (descColIndex >= 0 && cells[descColIndex]) {
+        const descText = cells[descColIndex].trim();
+        if (descText) {
+          description = descText;
+        }
+      }
+
+      // Get owner
+      let owner = "TBD";
+      if (ownerColIndex >= 0 && cells[ownerColIndex]) {
+        owner = cells[ownerColIndex].trim() || "TBD";
+      }
+
+      console.log(`Adding task: "${taskText}" (Phase: ${currentPhase})`);
+      
+      tasks.push({
+        phase: currentPhase,
+        task: taskText,
+        description,
+        owner,
+      });
+    }
+
+    // If we found tasks in this table, we're done (found the main scope table)
+    if (tasks.length > 0) {
+      break;
+    }
+  }
+
+  // If no tasks found in Implementation section tables, try fallback
+  if (tasks.length === 0) {
+    console.log("No tasks found in Implementation tables, using fallback parsing");
+    return parseSOWFromText(html.replace(/<[^>]+>/g, '\n'));
+  }
+
+  return tasks;
+}
+
+// Helper function to extract cell contents from a table row
+function extractCellsFromRow(rowHtml: string): string[] {
+  const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+  const cells: string[] = [];
+  let match;
+
+  while ((match = cellRegex.exec(rowHtml)) !== null) {
+    // Remove HTML tags and decode entities
+    let cellText = match[1]
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim();
+    cells.push(cellText);
+  }
+
+  return cells;
+}
+
+// Fallback text-based parsing
+function parseSOWFromText(text: string): SOWTask[] {
+  const tasks: SOWTask[] = [];
+  const lines = text.split("\n").filter((line) => line.trim());
   let currentPhase = "General";
 
   const phasePatterns = [
     /^phase\s*[\d.:]+\s*[-–:]\s*(.+)/i,
     /^stage\s*[\d.:]+\s*[-–:]\s*(.+)/i,
-    /^(\d+\.?\s+[A-Z][^.]*(?:Phase|Stage|Section))/i,
+    /implementation/i,
   ];
 
   const taskPatterns = [
@@ -117,24 +342,23 @@ async function parseSOWDocx(buffer: Buffer): Promise<SOWTask[]> {
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
+    if (!trimmedLine || trimmedLine.length < 10) continue;
 
-    let isPhase = false;
+    // Check for phase headers
     for (const pattern of phasePatterns) {
       const match = trimmedLine.match(pattern);
       if (match) {
         currentPhase = match[1]?.trim() || trimmedLine;
-        isPhase = true;
         break;
       }
     }
-    if (isPhase) continue;
 
+    // Check for task patterns
     for (const pattern of taskPatterns) {
       const match = trimmedLine.match(pattern);
       if (match) {
         const taskText = match[1]?.trim() || trimmedLine;
-        if (taskText.length > 5 && taskText.length < 500) {
+        if (taskText.length > 10 && taskText.length < 300) {
           tasks.push({
             phase: currentPhase,
             task: taskText,
@@ -145,45 +369,6 @@ async function parseSOWDocx(buffer: Buffer): Promise<SOWTask[]> {
         break;
       }
     }
-
-    if (
-      tasks.length === 0 ||
-      (trimmedLine.length > 10 &&
-        trimmedLine.length < 300 &&
-        /^[A-Z]/.test(trimmedLine) &&
-        !trimmedLine.endsWith(":"))
-    ) {
-      if (!tasks.some((t) => t.task === trimmedLine)) {
-        tasks.push({
-          phase: currentPhase,
-          task: trimmedLine,
-          description: trimmedLine,
-          owner: "TBD",
-        });
-      }
-    }
-  }
-
-  if (tasks.length < 3) {
-    const allTasks: SOWTask[] = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (
-        trimmed.length > 15 &&
-        trimmed.length < 300 &&
-        !trimmed.endsWith(":") &&
-        !trimmed.toLowerCase().startsWith("note") &&
-        !trimmed.toLowerCase().startsWith("table")
-      ) {
-        allTasks.push({
-          phase: "General",
-          task: trimmed,
-          description: trimmed,
-          owner: "TBD",
-        });
-      }
-    }
-    return allTasks.slice(0, 50);
   }
 
   return tasks;
@@ -309,20 +494,27 @@ function parseLOEExcel(
 }
 
 function findColumnIndex(row: string[], columnName: string): number {
-  const exactIndex = row.findIndex(
-    (cell) => cell.toLowerCase() === columnName.toLowerCase()
-  );
-  if (exactIndex !== -1) return exactIndex;
-
-  const partialIndex = row.findIndex((cell) =>
-    cell.toLowerCase().includes(columnName.toLowerCase())
-  );
-  if (partialIndex !== -1) return partialIndex;
-
+  if (!columnName) return -1;
+  
+  const columnNameLower = columnName.toLowerCase();
+  
+  // First check for "Column N" format
   const colMatch = columnName.match(/^Column\s+(\d+)$/i);
   if (colMatch) {
     return parseInt(colMatch[1], 10) - 1;
   }
+  
+  // Try exact match
+  const exactIndex = row.findIndex(
+    (cell) => cell && typeof cell === 'string' && cell.toLowerCase() === columnNameLower
+  );
+  if (exactIndex !== -1) return exactIndex;
+
+  // Try partial match
+  const partialIndex = row.findIndex((cell) =>
+    cell && typeof cell === 'string' && cell.toLowerCase().includes(columnNameLower)
+  );
+  if (partialIndex !== -1) return partialIndex;
 
   return -1;
 }
@@ -438,8 +630,10 @@ function levenshteinDistance(str1: string, str2: string): number {
 }
 
 function calculateSimilarity(str1: string, str2: string): number {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
+  if (!str1 || !str2) return 0;
+  
+  const s1 = String(str1).toLowerCase().trim();
+  const s2 = String(str2).toLowerCase().trim();
 
   if (s1 === s2) return 100;
 
@@ -451,7 +645,8 @@ function calculateSimilarity(str1: string, str2: string): number {
 }
 
 function detectTaskType(description: string): string {
-  const lower = description.toLowerCase();
+  if (!description) return "general";
+  const lower = String(description).toLowerCase();
 
   for (const type of Object.keys(TASK_TYPE_ESTIMATES)) {
     if (lower.includes(type)) {
@@ -463,7 +658,9 @@ function detectTaskType(description: string): string {
 }
 
 function analyzeComplexity(task: SOWTask, loeEntry?: LOEEntry): ComplexityAnalysis {
-  const description = `${task.task} ${task.description}`.toLowerCase();
+  const taskText = task?.task || "";
+  const descText = task?.description || "";
+  const description = `${taskText} ${descText}`.toLowerCase();
   const taskType = detectTaskType(description);
   const baseEstimate = TASK_TYPE_ESTIMATES[taskType] || TASK_TYPE_ESTIMATES.general;
 
