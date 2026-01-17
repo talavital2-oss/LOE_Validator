@@ -20,8 +20,17 @@ interface TaskMappingTableProps {
 function TaskRow({ match, index }: { match: TaskMatch; index: number }) {
   const [expanded, setExpanded] = useState(false);
 
-  const hasIssues = match.issues.length > 0;
-  const hasWarnings = match.warnings.length > 0;
+  const StatusIcon = match.match_status === "exact" 
+    ? CheckCircle2 
+    : match.match_status === "fuzzy" 
+    ? AlertTriangle 
+    : XCircle;
+
+  const statusIconColor = match.match_status === "exact"
+    ? "text-green-500"
+    : match.match_status === "fuzzy"
+    ? "text-brand-500"
+    : "text-red-500";
 
   return (
     <>
@@ -50,40 +59,30 @@ function TaskRow({ match, index }: { match: TaskMatch; index: number }) {
         </td>
         <td className="py-3 px-4">
           {match.loe_entry ? (
-            <p className="text-terasky-700">{match.loe_entry.task}</p>
+            <div>
+              <p className="text-terasky-700">{match.loe_entry.task}</p>
+              {match.loe_entry.days > 0 && (
+                <p className="text-xs text-terasky-500">{match.loe_entry.days} days</p>
+              )}
+            </div>
           ) : (
-            <span className="text-terasky-400 italic">No match</span>
+            <span className="text-terasky-400 italic">No match found</span>
           )}
         </td>
         <td className="py-3 px-4">
           <Badge className={cn("capitalize", getMatchStatusColor(match.match_status))}>
-            {match.match_status} ({match.match_score.toFixed(0)}%)
+            {match.match_status} ({match.match_score}%)
           </Badge>
         </td>
         <td className="py-3 px-4 text-center">
-          {match.loe_entry ? (
-            <span className="font-medium text-terasky-800">
-              {(match.loe_entry.total_days || match.loe_entry.days).toFixed(1)}
-            </span>
-          ) : (
-            <span className="text-terasky-400">—</span>
-          )}
-        </td>
-        <td className="py-3 px-4 text-center">
-          {hasIssues ? (
-            <XCircle className="w-5 h-5 text-red-500 mx-auto" />
-          ) : hasWarnings ? (
-            <AlertTriangle className="w-5 h-5 text-amber-500 mx-auto" />
-          ) : (
-            <CheckCircle2 className="w-5 h-5 text-green-500 mx-auto" />
-          )}
+          <StatusIcon className={cn("w-5 h-5 mx-auto", statusIconColor)} />
         </td>
       </tr>
 
       {/* Expanded Details */}
       {expanded && (
         <tr className="bg-terasky-50/50">
-          <td colSpan={6} className="py-4 px-8">
+          <td colSpan={5} className="py-4 px-8">
             <div className="grid md:grid-cols-2 gap-6">
               {/* SOW Task Details */}
               <div>
@@ -98,63 +97,54 @@ function TaskRow({ match, index }: { match: TaskMatch; index: number }) {
                 </div>
               </div>
 
-              {/* Complexity Analysis */}
-              {match.complexity_analysis && (
+              {/* LOE Entry Details */}
+              {match.loe_entry && (
                 <div>
                   <h4 className="text-sm font-medium text-terasky-700 mb-2">
-                    Complexity Analysis
+                    LOE Entry Details
                   </h4>
                   <div className="bg-white rounded-lg p-3 border border-terasky-200 text-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-terasky-500">Expected Days:</span>
-                      <span className="font-medium text-terasky-800">
-                        {match.complexity_analysis.expected_days_min.toFixed(1)} -{" "}
-                        {match.complexity_analysis.expected_days_max.toFixed(1)}
-                      </span>
-                    </div>
-                    {match.complexity_analysis.complexity_factors.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {match.complexity_analysis.complexity_factors.map(
-                          (factor, i) => (
-                            <Badge key={i} variant="secondary" className="text-xs">
-                              {factor.keyword} ({factor.multiplier}x)
-                            </Badge>
-                          )
-                        )}
-                      </div>
+                    <p className="text-terasky-600">{match.loe_entry.task}</p>
+                    {match.loe_entry.phase && (
+                      <p className="text-terasky-400 mt-2">
+                        Phase: {match.loe_entry.phase}
+                      </p>
                     )}
-                    <p className="text-terasky-500 mt-2 text-xs">
-                      {match.complexity_analysis.reasoning}
+                    <p className="text-terasky-400 mt-1">
+                      Days: {match.loe_entry.days}
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Issues & Warnings */}
-              {(hasIssues || hasWarnings) && (
-                <div className="md:col-span-2">
-                  <div className="flex flex-wrap gap-4">
-                    {match.issues.map((issue, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 text-red-600 text-sm"
-                      >
-                        <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        {issue}
-                      </div>
-                    ))}
-                    {match.warnings.map((warning, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 text-amber-600 text-sm"
-                      >
-                        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        {warning}
-                      </div>
-                    ))}
-                  </div>
+              {/* Match Analysis */}
+              <div className="md:col-span-2">
+                <h4 className="text-sm font-medium text-terasky-700 mb-2">
+                  Match Analysis
+                </h4>
+                <div className="bg-white rounded-lg p-3 border border-terasky-200 text-sm">
+                  <p className="text-terasky-600">
+                    {match.match_status === "exact" && (
+                      <>
+                        <span className="text-green-600 font-medium">Exact Match</span> - 
+                        The SOW task and LOE entry are semantically equivalent with {match.match_score}% confidence.
+                      </>
+                    )}
+                    {match.match_status === "fuzzy" && (
+                      <>
+                        <span className="text-brand-600 font-medium">Fuzzy Match</span> - 
+                        The SOW task and LOE entry appear to be related with {match.match_score}% confidence. Please verify this mapping is correct.
+                      </>
+                    )}
+                    {match.match_status === "unmatched" && (
+                      <>
+                        <span className="text-red-600 font-medium">No Match</span> - 
+                        No corresponding LOE entry was found for this SOW task. This may indicate a missing task in the LOE.
+                      </>
+                    )}
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           </td>
         </tr>
@@ -170,7 +160,7 @@ export function TaskMappingTable({ result }: TaskMappingTableProps) {
         <CardTitle className="flex items-center justify-between">
           <span>Task Mapping</span>
           <span className="text-sm font-normal text-terasky-500">
-            {result.matched_tasks} of {result.total_sow_tasks} matched
+            {result.matched_tasks} of {result.total_sow_tasks} matched ({result.match_percentage}%)
           </span>
         </CardTitle>
       </CardHeader>
@@ -192,9 +182,6 @@ export function TaskMappingTable({ result }: TaskMappingTableProps) {
                   Match
                 </th>
                 <th className="py-3 px-4 text-center text-xs font-medium text-terasky-500 uppercase tracking-wider">
-                  Days
-                </th>
-                <th className="py-3 px-4 text-center text-xs font-medium text-terasky-500 uppercase tracking-wider">
                   Status
                 </th>
               </tr>
@@ -214,6 +201,9 @@ export function TaskMappingTable({ result }: TaskMappingTableProps) {
               <AlertTriangle className="w-4 h-4 text-amber-500" />
               Orphaned LOE Entries ({result.orphaned_entries.length})
             </h4>
+            <p className="text-sm text-terasky-500 mb-3">
+              These LOE entries have no matching SOW task:
+            </p>
             <div className="space-y-2">
               {result.orphaned_entries.map((entry, i) => (
                 <div
@@ -222,7 +212,7 @@ export function TaskMappingTable({ result }: TaskMappingTableProps) {
                 >
                   <span className="text-amber-800">{entry.task}</span>
                   <Badge variant="warning">
-                    {(entry.total_days || entry.days).toFixed(1)} days
+                    {entry.days} days
                   </Badge>
                 </div>
               ))}

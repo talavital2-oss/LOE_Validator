@@ -21,16 +21,16 @@ interface ValidationResult {
   total_sow_tasks: number;
   total_loe_entries: number;
   matched_tasks: number;
+  exact_matches: number;
+  fuzzy_matches: number;
   unmatched_sow_tasks: number;
   orphaned_loe_entries: number;
-  total_sow_expected_days: number;
+  match_percentage: number;
   total_loe_days: number;
-  total_variance_percent: number;
   task_matches: TaskMatch[];
   orphaned_entries: LOEEntry[];
-  critical_issues: string[];
+  issues: string[];
   warnings: string[];
-  recommendations: string[];
   validation_timestamp?: string;
 }
 
@@ -39,14 +39,6 @@ interface TaskMatch {
   loe_entry?: { task: string; days: number };
   match_status: string;
   match_score: number;
-  complexity_analysis?: {
-    expected_days_min: number;
-    expected_days_max: number;
-    reasoning: string;
-  };
-  duration_valid: boolean;
-  issues: string[];
-  warnings: string[];
 }
 
 interface LOEEntry {
@@ -56,7 +48,6 @@ interface LOEEntry {
 
 interface ReportRequest {
   validation_result: ValidationResult;
-  include_effort_analysis: boolean;
   customer_name?: string;
   project_name?: string;
 }
@@ -64,9 +55,9 @@ interface ReportRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: ReportRequest = await request.json();
-    const { validation_result, include_effort_analysis, customer_name, project_name } = body;
+    const { validation_result, customer_name, project_name } = body;
 
-    const doc = generateWordDocument(validation_result, include_effort_analysis, customer_name, project_name);
+    const doc = generateWordDocument(validation_result, customer_name, project_name);
     const buffer = await Packer.toBuffer(doc);
     
     // Convert Buffer to Uint8Array for NextResponse
@@ -89,7 +80,6 @@ export async function POST(request: NextRequest) {
 
 function generateWordDocument(
   result: ValidationResult,
-  includeEffortAnalysis: boolean,
   customerName?: string,
   projectName?: string
 ): Document {
@@ -97,10 +87,10 @@ function generateWordDocument(
   const project = projectName || result.project_name || "Project";
   const timestamp = result.validation_timestamp || new Date().toISOString();
 
-  const sections: Paragraph[] = [];
+  const children: (Paragraph | Table)[] = [];
 
   // Title
-  sections.push(
+  children.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -117,7 +107,7 @@ function generateWordDocument(
   );
 
   // Subtitle with customer/project
-  sections.push(
+  children.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -132,7 +122,7 @@ function generateWordDocument(
   );
 
   // Date
-  sections.push(
+  children.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -149,7 +139,7 @@ function generateWordDocument(
 
   // Status Banner
   const statusColor = result.status === "PASS" ? "22C55E" : result.status === "WARNING" ? "F59E0B" : "EF4444";
-  sections.push(
+  children.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -160,12 +150,27 @@ function generateWordDocument(
         }),
       ],
       alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    })
+  );
+
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Match Rate: ${result.match_percentage}%`,
+          bold: true,
+          size: 28,
+          color: "333333",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
       spacing: { after: 600 },
     })
   );
 
   // Executive Summary Section
-  sections.push(
+  children.push(
     new Paragraph({
       children: [new TextRun({ text: "Executive Summary", bold: true, size: 28 })],
       heading: HeadingLevel.HEADING_1,
@@ -180,81 +185,31 @@ function generateWordDocument(
       createTableRow("Total SOW Tasks", String(result.total_sow_tasks), true),
       createTableRow("Total LOE Entries", String(result.total_loe_entries), false),
       createTableRow("Matched Tasks", String(result.matched_tasks), true),
+      createTableRow("  - Exact Matches", String(result.exact_matches), false),
+      createTableRow("  - Fuzzy Matches", String(result.fuzzy_matches), true),
       createTableRow("Unmatched SOW Tasks", String(result.unmatched_sow_tasks), false),
       createTableRow("Orphaned LOE Entries", String(result.orphaned_loe_entries), true),
-      createTableRow("Total LOE Days", String(result.total_loe_days), false),
+      createTableRow("Match Percentage", `${result.match_percentage}%`, false),
     ],
   });
-  sections.push(new Paragraph({ children: [] }));
+  children.push(summaryTable);
+  children.push(new Paragraph({ children: [], spacing: { after: 400 } }));
 
-  // Add effort analysis if enabled
-  if (includeEffortAnalysis) {
-    sections.push(
+  // Issues
+  if (result.issues.length > 0) {
+    children.push(
       new Paragraph({
-        children: [new TextRun({ text: "Effort Analysis", bold: true, size: 28 })],
+        children: [new TextRun({ text: "Issues", bold: true, size: 28, color: "EF4444" })],
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 400, after: 200 },
       })
     );
 
-    sections.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: "Expected Days (based on task complexity): ", bold: true }),
-          new TextRun({ text: String(result.total_sow_expected_days) }),
-        ],
-        spacing: { after: 100 },
-      })
-    );
-
-    sections.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: "Actual LOE Days: ", bold: true }),
-          new TextRun({ text: String(result.total_loe_days) }),
-        ],
-        spacing: { after: 100 },
-      })
-    );
-
-    sections.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: "Variance: ", bold: true }),
-          new TextRun({
-            text: `${result.total_variance_percent}%`,
-            color: result.total_variance_percent < -10 ? "EF4444" : result.total_variance_percent > 30 ? "F59E0B" : "22C55E",
-          }),
-        ],
-        spacing: { after: 200 },
-      })
-    );
-  }
-
-  // Critical Issues
-  if (result.critical_issues.length > 0) {
-    sections.push(
-      new Paragraph({
-        children: [new TextRun({ text: "Critical Issues", bold: true, size: 28, color: "EF4444" })],
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
-      })
-    );
-
-    for (const issue of result.critical_issues.slice(0, 10)) {
-      sections.push(
+    for (const issue of result.issues) {
+      children.push(
         new Paragraph({
           children: [new TextRun({ text: `• ${issue}`, color: "EF4444" })],
           spacing: { after: 100 },
-        })
-      );
-    }
-
-    if (result.critical_issues.length > 10) {
-      sections.push(
-        new Paragraph({
-          children: [new TextRun({ text: `... and ${result.critical_issues.length - 10} more issues`, italics: true })],
-          spacing: { after: 200 },
         })
       );
     }
@@ -262,7 +217,7 @@ function generateWordDocument(
 
   // Warnings
   if (result.warnings.length > 0) {
-    sections.push(
+    children.push(
       new Paragraph({
         children: [new TextRun({ text: "Warnings", bold: true, size: 28, color: "F59E0B" })],
         heading: HeadingLevel.HEADING_1,
@@ -270,8 +225,8 @@ function generateWordDocument(
       })
     );
 
-    for (const warning of result.warnings.slice(0, 10)) {
-      sections.push(
+    for (const warning of result.warnings) {
+      children.push(
         new Paragraph({
           children: [new TextRun({ text: `• ${warning}`, color: "F59E0B" })],
           spacing: { after: 100 },
@@ -280,28 +235,8 @@ function generateWordDocument(
     }
   }
 
-  // Recommendations
-  if (result.recommendations.length > 0) {
-    sections.push(
-      new Paragraph({
-        children: [new TextRun({ text: "Recommendations", bold: true, size: 28, color: "E35A34" })],
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
-      })
-    );
-
-    for (const rec of result.recommendations) {
-      sections.push(
-        new Paragraph({
-          children: [new TextRun({ text: `• ${rec}` })],
-          spacing: { after: 100 },
-        })
-      );
-    }
-  }
-
   // Task Mapping Details
-  sections.push(
+  children.push(
     new Paragraph({
       children: [new TextRun({ text: "Task Mapping Details", bold: true, size: 28 })],
       heading: HeadingLevel.HEADING_1,
@@ -316,7 +251,6 @@ function generateWordDocument(
         createHeaderCell("SOW Task"),
         createHeaderCell("LOE Task"),
         createHeaderCell("Match"),
-        createHeaderCell("LOE Days"),
         createHeaderCell("Status"),
       ],
     }),
@@ -327,10 +261,9 @@ function generateWordDocument(
     taskTableRows.push(
       new TableRow({
         children: [
-          createCell(match.sow_task.task.substring(0, 50) + (match.sow_task.task.length > 50 ? "..." : "")),
-          createCell(match.loe_entry?.task?.substring(0, 50) || "No match"),
+          createCell(truncateText(match.sow_task.task, 40)),
+          createCell(match.loe_entry?.task ? truncateText(match.loe_entry.task, 40) : "No match"),
           createCell(`${match.match_score}%`),
-          createCell(match.loe_entry?.days?.toString() || "-"),
           createCell(match.match_status.toUpperCase(), statusColor),
         ],
       })
@@ -341,10 +274,11 @@ function generateWordDocument(
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: taskTableRows,
   });
+  children.push(taskTable);
 
   // Orphaned LOE Entries
   if (result.orphaned_entries.length > 0) {
-    sections.push(
+    children.push(
       new Paragraph({
         children: [new TextRun({ text: "Orphaned LOE Entries", bold: true, size: 28 })],
         heading: HeadingLevel.HEADING_1,
@@ -352,7 +286,7 @@ function generateWordDocument(
       })
     );
 
-    sections.push(
+    children.push(
       new Paragraph({
         children: [new TextRun({ text: "These LOE entries have no matching SOW task:", italics: true })],
         spacing: { after: 200 },
@@ -360,7 +294,7 @@ function generateWordDocument(
     );
 
     for (const entry of result.orphaned_entries) {
-      sections.push(
+      children.push(
         new Paragraph({
           children: [new TextRun({ text: `• ${entry.task} (${entry.days} days)` })],
           spacing: { after: 100 },
@@ -370,7 +304,7 @@ function generateWordDocument(
   }
 
   // Footer
-  sections.push(
+  children.push(
     new Paragraph({
       children: [
         new TextRun({
@@ -386,18 +320,13 @@ function generateWordDocument(
   );
 
   return new Document({
-    sections: [
-      {
-        children: [
-          ...sections,
-          new Paragraph({ children: [] }), // Space before table
-          summaryTable,
-          new Paragraph({ children: [] }), // Space after table
-          taskTable,
-        ],
-      },
-    ],
+    sections: [{ children }],
   });
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + "...";
 }
 
 function createTableRow(label: string, value: string, shaded: boolean): TableRow {

@@ -39,7 +39,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [includeEffortAnalysis, setIncludeEffortAnalysis] = useState(true);
 
   const canProceedToConfig = sowFile && loeFile;
   const canValidate = columnMapping && canProceedToConfig;
@@ -80,7 +79,6 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           validation_result: validationResult,
-          include_effort_analysis: includeEffortAnalysis,
           customer_name: customerName,
           project_name: projectName,
         }),
@@ -341,16 +339,6 @@ export default function Home() {
               New Validation
             </Button>
             <div className="flex items-center gap-3">
-              {/* Effort Analysis Toggle */}
-              <label className="flex items-center gap-2 text-sm text-terasky-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeEffortAnalysis}
-                  onChange={(e) => setIncludeEffortAnalysis(e.target.checked)}
-                  className="w-4 h-4 rounded border-terasky-300 text-brand-500 focus:ring-brand-500"
-                />
-                Include Effort Analysis
-              </label>
               <Button
                 variant="outline"
                 onClick={() => setChatOpen(true)}
@@ -378,7 +366,7 @@ export default function Home() {
           </div>
 
           {/* Validation Summary */}
-          <ValidationSummary result={validationResult} includeEffortAnalysis={includeEffortAnalysis} />
+          <ValidationSummary result={validationResult} />
 
           {/* Task Mapping Table */}
           <TaskMappingTable result={validationResult} />

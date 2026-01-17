@@ -542,69 +542,14 @@ function getNumericValue(row: (string | number | null)[], index: number): number
   return isNaN(num) ? null : num;
 }
 
-// Validation Logic
-interface ComplexityFactor {
-  keyword: string;
-  category: string;
-  multiplier: number;
-}
-
-interface ComplexityAnalysis {
-  task_description: string;
-  detected_task_type?: string;
-  base_days: number;
-  complexity_factors: ComplexityFactor[];
-  total_multiplier: number;
-  expected_days_min: number;
-  expected_days_max: number;
-  reasoning: string;
-}
+// Validation Logic - Focused on smart context matching only
 
 interface TaskMatch {
   sow_task: SOWTask;
   loe_entry?: LOEEntry;
   match_status: "exact" | "fuzzy" | "unmatched" | "orphaned";
   match_score: number;
-  complexity_analysis?: ComplexityAnalysis;
-  duration_valid: boolean;
-  duration_variance?: number;
-  issues: string[];
-  warnings: string[];
 }
-
-const TASK_TYPE_ESTIMATES: { [key: string]: { min: number; max: number } } = {
-  installation: { min: 0.5, max: 2 },
-  configuration: { min: 1, max: 3 },
-  integration: { min: 2, max: 5 },
-  migration: { min: 3, max: 10 },
-  testing: { min: 1, max: 3 },
-  documentation: { min: 0.5, max: 2 },
-  training: { min: 1, max: 3 },
-  deployment: { min: 1, max: 5 },
-  design: { min: 2, max: 5 },
-  development: { min: 3, max: 10 },
-  review: { min: 0.5, max: 2 },
-  planning: { min: 1, max: 3 },
-  meeting: { min: 0.25, max: 1 },
-  workshop: { min: 0.5, max: 2 },
-  assessment: { min: 1, max: 3 },
-  audit: { min: 2, max: 5 },
-  support: { min: 1, max: 5 },
-  general: { min: 1, max: 3 },
-};
-
-const COMPLEXITY_KEYWORDS: { [key: string]: { category: string; multiplier: number } } = {
-  complex: { category: "complexity", multiplier: 1.5 },
-  advanced: { category: "complexity", multiplier: 1.5 },
-  enterprise: { category: "scale", multiplier: 1.3 },
-  multi: { category: "scale", multiplier: 1.3 },
-  custom: { category: "customization", multiplier: 1.4 },
-  integration: { category: "integration", multiplier: 1.3 },
-  security: { category: "security", multiplier: 1.2 },
-  ha: { category: "reliability", multiplier: 1.4 },
-  cluster: { category: "scale", multiplier: 1.3 },
-  automation: { category: "automation", multiplier: 1.2 },
-};
 
 function levenshteinDistance(str1: string, str2: string): number {
   const m = str1.length;
@@ -839,70 +784,7 @@ function calculatePhraseSimilarity(s1: string, s2: string): number {
   return 0;
 }
 
-function detectTaskType(description: string): string {
-  if (!description) return "general";
-  const lower = String(description).toLowerCase();
-
-  for (const type of Object.keys(TASK_TYPE_ESTIMATES)) {
-    if (lower.includes(type)) {
-      return type;
-    }
-  }
-
-  return "general";
-}
-
-function analyzeComplexity(task: SOWTask, loeEntry?: LOEEntry): ComplexityAnalysis {
-  const taskText = task?.task || "";
-  const descText = task?.description || "";
-  const description = `${taskText} ${descText}`.toLowerCase();
-  const taskType = detectTaskType(description);
-  const baseEstimate = TASK_TYPE_ESTIMATES[taskType] || TASK_TYPE_ESTIMATES.general;
-
-  const factors: ComplexityFactor[] = [];
-  let totalMultiplier = 1;
-
-  for (const [keyword, data] of Object.entries(COMPLEXITY_KEYWORDS)) {
-    if (description.includes(keyword.toLowerCase())) {
-      factors.push({
-        keyword,
-        category: data.category,
-        multiplier: data.multiplier,
-      });
-      totalMultiplier *= data.multiplier;
-    }
-  }
-
-  const baseDays = (baseEstimate.min + baseEstimate.max) / 2;
-  const expectedMin = Math.round(baseEstimate.min * totalMultiplier * 10) / 10;
-  const expectedMax = Math.round(baseEstimate.max * totalMultiplier * 10) / 10;
-
-  let reasoning = `Task type "${taskType}" typically takes ${baseEstimate.min}-${baseEstimate.max} days.`;
-  if (factors.length > 0) {
-    reasoning += ` Complexity factors: ${factors.map((f) => f.keyword).join(", ")}.`;
-  }
-  if (loeEntry) {
-    if (loeEntry.days < expectedMin) {
-      reasoning += ` LOE of ${loeEntry.days} days may be underestimated.`;
-    } else if (loeEntry.days > expectedMax) {
-      reasoning += ` LOE of ${loeEntry.days} days may be overestimated.`;
-    } else {
-      reasoning += ` LOE of ${loeEntry.days} days is within expected range.`;
-    }
-  }
-
-  return {
-    task_description: task.task,
-    detected_task_type: taskType,
-    base_days: baseDays,
-    complexity_factors: factors,
-    total_multiplier: Math.round(totalMultiplier * 100) / 100,
-    expected_days_min: expectedMin,
-    expected_days_max: expectedMax,
-    reasoning,
-  };
-}
-
+// Smart context-based task matching - no effort estimation
 function matchTasks(
   sowTasks: SOWTask[],
   loeEntries: LOEEntry[]
@@ -942,47 +824,18 @@ function matchTasks(
     if (bestMatch) {
       usedLoeIndices.add(bestMatch.index);
 
-      const complexity = analyzeComplexity(sowTask, bestMatch.entry);
-      const daysInRange =
-        bestMatch.entry.days >= complexity.expected_days_min &&
-        bestMatch.entry.days <= complexity.expected_days_max;
-
-      const variance = complexity.expected_days_min > 0
-        ? Math.round(((bestMatch.entry.days - complexity.expected_days_min) / complexity.expected_days_min) * 100)
-        : 0;
-
-      const issues: string[] = [];
-      const warnings: string[] = [];
-
-      if (bestMatch.entry.days < complexity.expected_days_min) {
-        issues.push(`LOE (${bestMatch.entry.days}d) below expected minimum (${complexity.expected_days_min}d)`);
-      } else if (bestMatch.entry.days > complexity.expected_days_max * 1.5) {
-        warnings.push(`LOE (${bestMatch.entry.days}d) exceeds expected maximum (${complexity.expected_days_max}d)`);
-      }
-
       matches.push({
         sow_task: sowTask,
         loe_entry: bestMatch.entry,
-        match_status: bestMatch.score >= 90 ? "exact" : "fuzzy",
+        match_status: bestMatch.score >= 80 ? "exact" : "fuzzy",
         match_score: bestMatch.score,
-        complexity_analysis: complexity,
-        duration_valid: daysInRange,
-        duration_variance: variance,
-        issues,
-        warnings,
       });
     } else {
-      const complexity = analyzeComplexity(sowTask);
-
       matches.push({
         sow_task: sowTask,
         loe_entry: undefined,
         match_status: "unmatched",
         match_score: 0,
-        complexity_analysis: complexity,
-        duration_valid: false,
-        issues: ["No matching LOE entry found for this SOW task"],
-        warnings: [],
       });
     }
   }
@@ -1007,51 +860,32 @@ function validateSOWvsLOE(
 
   const matchedCount = matches.filter((m) => m.match_status !== "unmatched").length;
   const unmatchedCount = matches.filter((m) => m.match_status === "unmatched").length;
+  const exactMatchCount = matches.filter((m) => m.match_status === "exact").length;
+  const fuzzyMatchCount = matches.filter((m) => m.match_status === "fuzzy").length;
 
-  const totalLOEDays = loeEntries.reduce((sum, e) => sum + e.days, 0);
-  const expectedDays = matches.reduce(
-    (sum, m) =>
-      sum + (m.complexity_analysis ? (m.complexity_analysis.expected_days_min + m.complexity_analysis.expected_days_max) / 2 : 0),
-    0
-  );
+  // Calculate total LOE days for reference only (no estimation)
+  const totalLOEDays = loeEntries.reduce((sum, e) => sum + (e.days || 0), 0);
 
-  const variancePercent = expectedDays > 0
-    ? Math.round(((totalLOEDays - expectedDays) / expectedDays) * 100)
-    : 0;
-
-  const criticalIssues: string[] = [];
+  const issues: string[] = [];
   const warnings: string[] = [];
-  const recommendations: string[] = [];
 
   if (unmatchedCount > 0) {
-    criticalIssues.push(`${unmatchedCount} SOW task(s) have no matching LOE entry`);
+    issues.push(`${unmatchedCount} SOW task(s) have no matching LOE entry`);
   }
 
   if (orphaned.length > 0) {
     warnings.push(`${orphaned.length} LOE entry/entries have no matching SOW task`);
   }
 
-  for (const match of matches) {
-    criticalIssues.push(...match.issues);
-    warnings.push(...match.warnings);
-  }
-
-  if (unmatchedCount > 0) {
-    recommendations.push("Add LOE entries for all unmatched SOW tasks");
-  }
-  if (orphaned.length > 0) {
-    recommendations.push("Review orphaned LOE entries and map them to SOW tasks or remove");
-  }
-  if (variancePercent < -20) {
-    recommendations.push("Consider increasing LOE estimates - total appears underestimated");
-  } else if (variancePercent > 50) {
-    recommendations.push("Review LOE estimates for potential over-estimation");
-  }
-
+  // Determine status based on matching results only
   let status: "PASS" | "WARNING" | "FAIL" = "PASS";
-  if (criticalIssues.length > 0) {
+  
+  // Calculate match percentage
+  const matchPercentage = sowTasks.length > 0 ? (matchedCount / sowTasks.length) * 100 : 100;
+  
+  if (matchPercentage < 50) {
     status = "FAIL";
-  } else if (warnings.length > 0 || variancePercent < -10 || variancePercent > 30) {
+  } else if (matchPercentage < 80 || orphaned.length > 0) {
     status = "WARNING";
   }
 
@@ -1062,17 +896,17 @@ function validateSOWvsLOE(
     total_sow_tasks: sowTasks.length,
     total_loe_entries: loeEntries.length,
     matched_tasks: matchedCount,
+    exact_matches: exactMatchCount,
+    fuzzy_matches: fuzzyMatchCount,
     unmatched_sow_tasks: unmatchedCount,
     orphaned_loe_entries: orphaned.length,
-    total_sow_expected_days: Math.round(expectedDays * 10) / 10,
+    match_percentage: Math.round(matchPercentage),
     total_loe_days: totalLOEDays,
-    total_variance_percent: variancePercent,
     task_matches: matches,
     orphaned_entries: orphaned,
     sow_tasks: sowTasks,
-    critical_issues: criticalIssues,
+    issues,
     warnings,
-    recommendations,
     validation_timestamp: new Date().toISOString(),
   };
 }

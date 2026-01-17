@@ -8,21 +8,18 @@ import {
   FileText,
   FileSpreadsheet,
   LinkIcon,
-  Clock,
-  TrendingUp,
-  TrendingDown,
+  Target,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ValidationResult } from "@/lib/api";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface ValidationSummaryProps {
   result: ValidationResult;
-  includeEffortAnalysis?: boolean;
 }
 
-export function ValidationSummary({ result, includeEffortAnalysis = true }: ValidationSummaryProps) {
+export function ValidationSummary({ result }: ValidationSummaryProps) {
   const StatusIcon =
     result.status === "PASS"
       ? CheckCircle2
@@ -76,7 +73,7 @@ export function ValidationSummary({ result, includeEffortAnalysis = true }: Vali
                       : "destructive"
                   }
                 >
-                  {result.status}
+                  {result.match_percentage}% Match
                 </Badge>
               </div>
               <p className="text-terasky-600 mt-1">
@@ -139,78 +136,46 @@ export function ValidationSummary({ result, includeEffortAnalysis = true }: Vali
                 <p className="text-2xl font-bold text-terasky-800">
                   {result.matched_tasks}
                 </p>
-                <p className="text-sm text-terasky-500">Matched</p>
+                <p className="text-sm text-terasky-500">
+                  Matched ({result.exact_matches} exact, {result.fuzzy_matches} fuzzy)
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Total LOE Days */}
+        {/* Match Percentage */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-amber-100">
-                <Clock className="w-5 h-5 text-amber-600" />
+              <div className="p-2 rounded-xl bg-brand-100">
+                <Target className="w-5 h-5 text-brand-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-terasky-800">
-                  {result.total_loe_days.toFixed(1)}
+                  {result.match_percentage}%
                 </p>
-                <p className="text-sm text-terasky-500">LOE Days</p>
+                <p className="text-sm text-terasky-500">Match Rate</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Variance / Effort Analysis - Only show if enabled */}
-      {includeEffortAnalysis && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {result.total_variance_percent >= 0 ? (
-                  <TrendingUp className="w-5 h-5 text-amber-600" />
-                ) : (
-                  <TrendingDown className="w-5 h-5 text-brand-600" />
-                )}
-                <div>
-                  <p className="text-sm text-terasky-500">Duration Variance (Effort Analysis)</p>
-                  <p className="font-medium text-terasky-700">
-                    Expected: {result.total_sow_expected_days.toFixed(1)} days vs
-                    LOE: {result.total_loe_days.toFixed(1)} days
-                  </p>
-                </div>
-              </div>
-              <div
-                className={cn(
-                  "text-2xl font-bold",
-                  Math.abs(result.total_variance_percent) > 30
-                    ? "text-amber-600"
-                    : "text-green-600"
-                )}
-              >
-                {formatPercent(result.total_variance_percent)}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Issues & Warnings */}
-      {(result.critical_issues.length > 0 || result.warnings.length > 0) && (
+      {(result.issues.length > 0 || result.warnings.length > 0) && (
         <div className="grid md:grid-cols-2 gap-4">
-          {result.critical_issues.length > 0 && (
+          {result.issues.length > 0 && (
             <Card className="border-red-200 bg-red-50/50">
               <CardHeader className="pb-2">
                 <CardTitle className="text-red-700 flex items-center gap-2 text-base">
                   <XCircle className="w-5 h-5" />
-                  Critical Issues ({result.critical_issues.length})
+                  Issues ({result.issues.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {result.critical_issues.map((issue, i) => (
+                  {result.issues.map((issue, i) => (
                     <li key={i} className="text-sm text-red-600 flex gap-2">
                       <span className="text-red-400">•</span>
                       {issue}
@@ -242,28 +207,6 @@ export function ValidationSummary({ result, includeEffortAnalysis = true }: Vali
             </Card>
           )}
         </div>
-      )}
-
-      {/* Recommendations */}
-      {result.recommendations.length > 0 && (
-        <Card className="border-brand-200 bg-brand-50/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-brand-700 flex items-center gap-2 text-base">
-              <CheckCircle2 className="w-5 h-5" />
-              Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {result.recommendations.map((rec, i) => (
-                <li key={i} className="text-sm text-brand-600 flex gap-2">
-                  <span className="text-brand-400">{i + 1}.</span>
-                  {rec}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
       )}
     </div>
   );

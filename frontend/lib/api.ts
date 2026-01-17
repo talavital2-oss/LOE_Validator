@@ -47,33 +47,11 @@ export interface LOEEntry {
   total_days?: number;
 }
 
-export interface ComplexityFactor {
-  keyword: string;
-  category: string;
-  multiplier: number;
-}
-
-export interface ComplexityAnalysis {
-  task_description: string;
-  detected_task_type?: string;
-  base_days: number;
-  complexity_factors: ComplexityFactor[];
-  total_multiplier: number;
-  expected_days_min: number;
-  expected_days_max: number;
-  reasoning: string;
-}
-
 export interface TaskMatch {
   sow_task: SOWTask;
   loe_entry?: LOEEntry;
   match_status: "exact" | "fuzzy" | "unmatched" | "orphaned";
   match_score: number;
-  complexity_analysis?: ComplexityAnalysis;
-  duration_valid: boolean;
-  duration_variance?: number;
-  issues: string[];
-  warnings: string[];
 }
 
 export interface ValidationResult {
@@ -83,18 +61,17 @@ export interface ValidationResult {
   total_sow_tasks: number;
   total_loe_entries: number;
   matched_tasks: number;
+  exact_matches: number;
+  fuzzy_matches: number;
   unmatched_sow_tasks: number;
   orphaned_loe_entries: number;
-  total_sow_expected_days: number;
+  match_percentage: number;
   total_loe_days: number;
-  total_variance_percent: number;
   task_matches: TaskMatch[];
   orphaned_entries: LOEEntry[];
   sow_tasks: SOWTask[];
-  critical_issues: string[];
+  issues: string[];
   warnings: string[];
-  recommendations: string[];
-  report_path?: string;
   validation_timestamp?: string;
 }
 
@@ -203,18 +180,18 @@ function generateTextReport(result: ValidationResult): string {
   lines.push(`Total SOW Tasks: ${result.total_sow_tasks}`);
   lines.push(`Total LOE Entries: ${result.total_loe_entries}`);
   lines.push(`Matched Tasks: ${result.matched_tasks}`);
+  lines.push(`  - Exact Matches: ${result.exact_matches}`);
+  lines.push(`  - Fuzzy Matches: ${result.fuzzy_matches}`);
   lines.push(`Unmatched SOW Tasks: ${result.unmatched_sow_tasks}`);
   lines.push(`Orphaned LOE Entries: ${result.orphaned_loe_entries}`);
-  lines.push(`Total LOE Days: ${result.total_loe_days}`);
-  lines.push(`Expected Days: ${result.total_sow_expected_days}`);
-  lines.push(`Variance: ${result.total_variance_percent}%`);
+  lines.push(`Match Percentage: ${result.match_percentage}%`);
   lines.push("");
 
-  if (result.critical_issues.length > 0) {
+  if (result.issues.length > 0) {
     lines.push("-".repeat(60));
-    lines.push("CRITICAL ISSUES");
+    lines.push("ISSUES");
     lines.push("-".repeat(60));
-    result.critical_issues.forEach((issue) => lines.push(`• ${issue}`));
+    result.issues.forEach((issue) => lines.push(`• ${issue}`));
     lines.push("");
   }
 
@@ -226,31 +203,18 @@ function generateTextReport(result: ValidationResult): string {
     lines.push("");
   }
 
-  if (result.recommendations.length > 0) {
-    lines.push("-".repeat(60));
-    lines.push("RECOMMENDATIONS");
-    lines.push("-".repeat(60));
-    result.recommendations.forEach((rec) => lines.push(`• ${rec}`));
-    lines.push("");
-  }
-
   lines.push("-".repeat(60));
   lines.push("TASK MATCHES");
   lines.push("-".repeat(60));
 
   result.task_matches.forEach((match, idx) => {
-    lines.push(`\n${idx + 1}. ${match.sow_task.task}`);
-    lines.push(`   Status: ${match.match_status.toUpperCase()}`);
-    lines.push(`   Match Score: ${match.match_score}%`);
+    lines.push(`\n${idx + 1}. SOW: ${match.sow_task.task}`);
+    lines.push(`   Match Status: ${match.match_status.toUpperCase()} (${match.match_score}%)`);
     if (match.loe_entry) {
-      lines.push(`   LOE Task: ${match.loe_entry.task}`);
-      lines.push(`   LOE Days: ${match.loe_entry.days}`);
-    }
-    if (match.complexity_analysis) {
-      lines.push(`   Expected: ${match.complexity_analysis.expected_days_min}-${match.complexity_analysis.expected_days_max} days`);
-    }
-    if (match.issues.length > 0) {
-      lines.push(`   Issues: ${match.issues.join("; ")}`);
+      lines.push(`   LOE: ${match.loe_entry.task}`);
+      lines.push(`   Days: ${match.loe_entry.days}`);
+    } else {
+      lines.push(`   LOE: No matching entry found`);
     }
   });
 
