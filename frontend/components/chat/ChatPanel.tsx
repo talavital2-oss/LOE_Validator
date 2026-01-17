@@ -64,7 +64,7 @@ export function ChatPanel({
       const errorMessage: ChatMessage = {
         role: "assistant",
         content:
-          "Sorry, I encountered an error. Please make sure the ANTHROPIC_API_KEY is configured in the backend.",
+          "Sorry, I encountered an error. Please make sure the OPENAI_API_KEY is configured in your Vercel environment variables.",
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
