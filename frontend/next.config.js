@@ -1,14 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
-      },
-    ];
-  },
+  // Remove rewrites - we now use Next.js API routes directly
+  // No need for standalone output on Vercel
 };
 
 module.exports = nextConfig;
