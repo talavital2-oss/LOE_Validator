@@ -23,7 +23,6 @@ import {
   validateDocuments,
   generateReport,
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 type Step = "upload" | "configure" | "validate" | "results";
 
@@ -52,8 +51,9 @@ export default function Home() {
 
     try {
       const result = await validateDocuments({
-        sow_file_id: sowFile.file_id,
-        loe_file_id: loeFile.file_id,
+        sow_content: sowFile.content,
+        sow_filename: sowFile.filename,
+        loe_content: loeFile.content,
         column_mapping: columnMapping,
         customer_name: customerName,
         project_name: projectName,
@@ -78,7 +78,10 @@ export default function Home() {
       const result = await generateReport(reportId, validationResult);
       
       // Download the file
-      window.open(result.download_url, "_blank");
+      const link = document.createElement("a");
+      link.href = result.download_url;
+      link.download = result.filename;
+      link.click();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Report generation failed");
     } finally {
@@ -222,6 +225,7 @@ export default function Home() {
         <div className="space-y-6 animate-fade-in">
           <ColumnMappingDialog
             loeFileId={loeFile.file_id}
+            loeContent={loeFile.content}
             onMappingComplete={(mapping) => {
               setColumnMapping(mapping);
               setStep("validate");

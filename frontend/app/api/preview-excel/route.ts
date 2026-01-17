@@ -1,39 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import { existsSync, readdirSync } from "fs";
-import path from "path";
-import os from "os";
 import * as XLSX from "xlsx";
 
-const UPLOAD_DIR = path.join(os.tmpdir(), "loe-validator-uploads");
+interface PreviewRequest {
+  content: string; // Base64 encoded file content
+  file_id: string;
+}
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { fileId: string } }
-) {
+export async function POST(request: NextRequest) {
   try {
-    const { fileId } = params;
+    const body: PreviewRequest = await request.json();
+    const { content, file_id } = body;
 
-    // Find the file with this ID
-    if (!existsSync(UPLOAD_DIR)) {
+    if (!content) {
       return NextResponse.json(
-        { detail: "Upload directory not found" },
-        { status: 404 }
+        { detail: "File content is required" },
+        { status: 400 }
       );
     }
 
-    const files = readdirSync(UPLOAD_DIR);
-    const matchingFile = files.find((f) => f.startsWith(fileId));
-
-    if (!matchingFile) {
-      return NextResponse.json(
-        { detail: "File not found" },
-        { status: 404 }
-      );
-    }
-
-    const filePath = path.join(UPLOAD_DIR, matchingFile);
-    const buffer = await readFile(filePath);
+    // Decode base64 content
+    const buffer = Buffer.from(content, "base64");
 
     // Parse Excel file
     const workbook = XLSX.read(buffer, { type: "buffer" });
@@ -77,7 +63,7 @@ export async function GET(
     });
 
     return NextResponse.json({
-      file_id: fileId,
+      file_id,
       sheets: sheetNames,
       columns,
       row_count: jsonData.length - headerRowIndex - 1,

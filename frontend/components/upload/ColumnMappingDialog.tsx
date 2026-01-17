@@ -5,16 +5,17 @@ import { Settings2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { previewExcel, ExcelPreview, ColumnMapping } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 interface ColumnMappingDialogProps {
   loeFileId: string;
+  loeContent: string; // Base64 encoded content
   onMappingComplete: (mapping: ColumnMapping) => void;
   initialMapping?: ColumnMapping;
 }
 
 export function ColumnMappingDialog({
   loeFileId,
+  loeContent,
   onMappingComplete,
   initialMapping,
 }: ColumnMappingDialogProps) {
@@ -28,7 +29,7 @@ export function ColumnMappingDialog({
   useEffect(() => {
     const loadPreview = async () => {
       try {
-        const data = await previewExcel(loeFileId);
+        const data = await previewExcel(loeFileId, loeContent);
         setPreview(data);
 
         // Auto-detect columns based on common names
@@ -65,7 +66,7 @@ export function ColumnMappingDialog({
     };
 
     loadPreview();
-  }, [loeFileId]);
+  }, [loeFileId, loeContent]);
 
   const handleSubmit = () => {
     if (!mapping.task_column || !mapping.days_column) {

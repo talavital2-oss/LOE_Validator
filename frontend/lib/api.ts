@@ -9,6 +9,7 @@ export interface UploadResponse {
   filename: string;
   file_type: "sow" | "loe";
   size_bytes: number;
+  content: string; // Base64 encoded file content
 }
 
 export interface ExcelColumn {
@@ -119,18 +120,24 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({ detail: "Upload failed" }));
     throw new Error(error.detail || "Upload failed");
   }
 
   return response.json();
 }
 
-export async function previewExcel(fileId: string): Promise<ExcelPreview> {
-  const response = await fetch(`${API_BASE}/preview-excel/${fileId}`);
+export async function previewExcel(fileId: string, content: string): Promise<ExcelPreview> {
+  const response = await fetch(`${API_BASE}/preview-excel`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ file_id: fileId, content }),
+  });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({ detail: "Preview failed" }));
     throw new Error(error.detail || "Preview failed");
   }
 
@@ -138,8 +145,9 @@ export async function previewExcel(fileId: string): Promise<ExcelPreview> {
 }
 
 export async function validateDocuments(params: {
-  sow_file_id: string;
-  loe_file_id: string;
+  sow_content: string;
+  sow_filename: string;
+  loe_content: string;
   column_mapping: ColumnMapping;
   sheet_name?: string;
   customer_name?: string;
@@ -154,7 +162,7 @@ export async function validateDocuments(params: {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({ detail: "Validation failed" }));
     throw new Error(error.detail || "Validation failed");
   }
 
@@ -165,20 +173,103 @@ export async function generateReport(
   validationId: string,
   validationResult: ValidationResult
 ): Promise<{ status: string; filename: string; download_url: string }> {
-  const response = await fetch(`${API_BASE}/generate-report/${validationId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(validationResult),
-  });
+  // For now, generate a simple text report and create a blob URL
+  const reportContent = generateTextReport(validationResult);
+  const blob = new Blob([reportContent], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Report generation failed");
+  return {
+    status: "success",
+    filename: `validation-report-${validationId}.txt`,
+    download_url: url,
+  };
+}
+
+function generateTextReport(result: ValidationResult): string {
+  const lines: string[] = [];
+
+  lines.push("=".repeat(60));
+  lines.push("LOE VALIDATION REPORT");
+  lines.push("=".repeat(60));
+  lines.push("");
+  lines.push(`Customer: ${result.customer_name || "Not specified"}`);
+  lines.push(`Project: ${result.project_name || "Not specified"}`);
+  lines.push(`Generated: ${result.validation_timestamp || new Date().toISOString()}`);
+  lines.push("");
+  lines.push("-".repeat(60));
+  lines.push("SUMMARY");
+  lines.push("-".repeat(60));
+  lines.push(`Status: ${result.status}`);
+  lines.push(`Total SOW Tasks: ${result.total_sow_tasks}`);
+  lines.push(`Total LOE Entries: ${result.total_loe_entries}`);
+  lines.push(`Matched Tasks: ${result.matched_tasks}`);
+  lines.push(`Unmatched SOW Tasks: ${result.unmatched_sow_tasks}`);
+  lines.push(`Orphaned LOE Entries: ${result.orphaned_loe_entries}`);
+  lines.push(`Total LOE Days: ${result.total_loe_days}`);
+  lines.push(`Expected Days: ${result.total_sow_expected_days}`);
+  lines.push(`Variance: ${result.total_variance_percent}%`);
+  lines.push("");
+
+  if (result.critical_issues.length > 0) {
+    lines.push("-".repeat(60));
+    lines.push("CRITICAL ISSUES");
+    lines.push("-".repeat(60));
+    result.critical_issues.forEach((issue) => lines.push(`• ${issue}`));
+    lines.push("");
   }
 
-  return response.json();
+  if (result.warnings.length > 0) {
+    lines.push("-".repeat(60));
+    lines.push("WARNINGS");
+    lines.push("-".repeat(60));
+    result.warnings.forEach((warning) => lines.push(`• ${warning}`));
+    lines.push("");
+  }
+
+  if (result.recommendations.length > 0) {
+    lines.push("-".repeat(60));
+    lines.push("RECOMMENDATIONS");
+    lines.push("-".repeat(60));
+    result.recommendations.forEach((rec) => lines.push(`• ${rec}`));
+    lines.push("");
+  }
+
+  lines.push("-".repeat(60));
+  lines.push("TASK MATCHES");
+  lines.push("-".repeat(60));
+
+  result.task_matches.forEach((match, idx) => {
+    lines.push(`\n${idx + 1}. ${match.sow_task.task}`);
+    lines.push(`   Status: ${match.match_status.toUpperCase()}`);
+    lines.push(`   Match Score: ${match.match_score}%`);
+    if (match.loe_entry) {
+      lines.push(`   LOE Task: ${match.loe_entry.task}`);
+      lines.push(`   LOE Days: ${match.loe_entry.days}`);
+    }
+    if (match.complexity_analysis) {
+      lines.push(`   Expected: ${match.complexity_analysis.expected_days_min}-${match.complexity_analysis.expected_days_max} days`);
+    }
+    if (match.issues.length > 0) {
+      lines.push(`   Issues: ${match.issues.join("; ")}`);
+    }
+  });
+
+  if (result.orphaned_entries.length > 0) {
+    lines.push("");
+    lines.push("-".repeat(60));
+    lines.push("ORPHANED LOE ENTRIES");
+    lines.push("-".repeat(60));
+    result.orphaned_entries.forEach((entry) => {
+      lines.push(`• ${entry.task} (${entry.days} days)`);
+    });
+  }
+
+  lines.push("");
+  lines.push("=".repeat(60));
+  lines.push("END OF REPORT");
+  lines.push("=".repeat(60));
+
+  return lines.join("\n");
 }
 
 export async function sendChatMessage(
@@ -199,57 +290,39 @@ export async function sendChatMessage(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({ detail: "Chat failed" }));
     throw new Error(error.detail || "Chat failed");
   }
 
   return response.json();
 }
 
-export async function* streamChatMessage(
-  message: string,
-  validationResult: ValidationResult,
-  history: ChatMessage[] = []
-): AsyncGenerator<string, void, unknown> {
-  const response = await fetch(`${API_BASE}/chat/stream`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      message,
-      validation_result: validationResult,
-      history,
-    }),
-  });
+// Utility functions
+export function cn(...classes: (string | undefined | null | false)[]): string {
+  return classes.filter(Boolean).join(" ");
+}
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Chat failed");
-  }
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
 
-  const reader = response.body?.getReader();
-  const decoder = new TextDecoder();
-
-  if (!reader) {
-    throw new Error("No response body");
-  }
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value);
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const data = line.slice(6);
-        if (data === "[DONE]") {
-          return;
-        }
-        yield data;
-      }
-    }
+export function getMatchStatusColor(
+  status: "exact" | "fuzzy" | "unmatched" | "orphaned"
+): string {
+  switch (status) {
+    case "exact":
+      return "text-green-600 bg-green-100";
+    case "fuzzy":
+      return "text-brand-600 bg-brand-100";
+    case "unmatched":
+      return "text-red-600 bg-red-100";
+    case "orphaned":
+      return "text-amber-600 bg-amber-100";
+    default:
+      return "text-slate-600 bg-slate-100";
   }
 }

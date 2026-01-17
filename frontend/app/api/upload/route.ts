@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { writeFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
-import path from "path";
-import os from "os";
-
-// Use /tmp for Vercel serverless functions
-const UPLOAD_DIR = path.join(os.tmpdir(), "loe-validator-uploads");
 
 export async function POST(request: NextRequest) {
   try {
-    // Ensure upload directory exists
-    if (!existsSync(UPLOAD_DIR)) {
-      await mkdir(UPLOAD_DIR, { recursive: true });
-    }
-
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -42,20 +30,20 @@ export async function POST(request: NextRequest) {
 
     // Generate unique file ID
     const fileId = uuidv4();
-    const ext = path.extname(file.name);
-    const savedFilename = `${fileId}${ext}`;
-    const filePath = path.join(UPLOAD_DIR, savedFilename);
 
-    // Save file
+    // Read file content
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
+    
+    // Return the base64 content for client-side storage
+    const base64Content = buffer.toString("base64");
 
     return NextResponse.json({
       file_id: fileId,
       filename: file.name,
       file_type: fileType,
       size_bytes: file.size,
+      content: base64Content, // Include content for client-side storage
     });
   } catch (error) {
     console.error("Upload error:", error);
