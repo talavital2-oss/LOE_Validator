@@ -39,6 +39,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [includeEffortAnalysis, setIncludeEffortAnalysis] = useState(true);
 
   const canProceedToConfig = sowFile && loeFile;
   const canValidate = columnMapping && canProceedToConfig;
@@ -74,14 +75,31 @@ export default function Home() {
     setIsGeneratingReport(true);
 
     try {
-      const reportId = Date.now().toString();
-      const result = await generateReport(reportId, validationResult);
-      
-      // Download the file
+      const response = await fetch("/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          validation_result: validationResult,
+          include_effort_analysis: includeEffortAnalysis,
+          customer_name: customerName,
+          project_name: projectName,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate report");
+      }
+
+      // Download the Word document
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = result.download_url;
-      link.download = result.filename;
+      link.href = url;
+      link.download = `LOE_Validation_Report_${Date.now()}.docx`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Report generation failed");
     } finally {
@@ -322,7 +340,17 @@ export default function Home() {
               <RefreshCw className="w-4 h-4 mr-2" />
               New Validation
             </Button>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
+              {/* Effort Analysis Toggle */}
+              <label className="flex items-center gap-2 text-sm text-terasky-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeEffortAnalysis}
+                  onChange={(e) => setIncludeEffortAnalysis(e.target.checked)}
+                  className="w-4 h-4 rounded border-terasky-300 text-brand-500 focus:ring-brand-500"
+                />
+                Include Effort Analysis
+              </label>
               <Button
                 variant="outline"
                 onClick={() => setChatOpen(true)}
@@ -342,7 +370,7 @@ export default function Home() {
                 ) : (
                   <>
                     <Download className="w-4 h-4 mr-2" />
-                    Download Report
+                    Download Report (.docx)
                   </>
                 )}
               </Button>
@@ -350,7 +378,7 @@ export default function Home() {
           </div>
 
           {/* Validation Summary */}
-          <ValidationSummary result={validationResult} />
+          <ValidationSummary result={validationResult} includeEffortAnalysis={includeEffortAnalysis} />
 
           {/* Task Mapping Table */}
           <TaskMappingTable result={validationResult} />

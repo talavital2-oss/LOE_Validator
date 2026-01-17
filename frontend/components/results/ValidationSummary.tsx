@@ -19,9 +19,10 @@ import { cn, formatPercent } from "@/lib/utils";
 
 interface ValidationSummaryProps {
   result: ValidationResult;
+  includeEffortAnalysis?: boolean;
 }
 
-export function ValidationSummary({ result }: ValidationSummaryProps) {
+export function ValidationSummary({ result, includeEffortAnalysis = true }: ValidationSummaryProps) {
   const StatusIcon =
     result.status === "PASS"
       ? CheckCircle2
@@ -162,37 +163,39 @@ export function ValidationSummary({ result }: ValidationSummaryProps) {
         </Card>
       </div>
 
-      {/* Variance */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {result.total_variance_percent >= 0 ? (
-                <TrendingUp className="w-5 h-5 text-amber-600" />
-              ) : (
-                <TrendingDown className="w-5 h-5 text-brand-600" />
-              )}
-              <div>
-                <p className="text-sm text-terasky-500">Duration Variance</p>
-                <p className="font-medium text-terasky-700">
-                  Expected: {result.total_sow_expected_days.toFixed(1)} days vs
-                  LOE: {result.total_loe_days.toFixed(1)} days
-                </p>
+      {/* Variance / Effort Analysis - Only show if enabled */}
+      {includeEffortAnalysis && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {result.total_variance_percent >= 0 ? (
+                  <TrendingUp className="w-5 h-5 text-amber-600" />
+                ) : (
+                  <TrendingDown className="w-5 h-5 text-brand-600" />
+                )}
+                <div>
+                  <p className="text-sm text-terasky-500">Duration Variance (Effort Analysis)</p>
+                  <p className="font-medium text-terasky-700">
+                    Expected: {result.total_sow_expected_days.toFixed(1)} days vs
+                    LOE: {result.total_loe_days.toFixed(1)} days
+                  </p>
+                </div>
+              </div>
+              <div
+                className={cn(
+                  "text-2xl font-bold",
+                  Math.abs(result.total_variance_percent) > 30
+                    ? "text-amber-600"
+                    : "text-green-600"
+                )}
+              >
+                {formatPercent(result.total_variance_percent)}
               </div>
             </div>
-            <div
-              className={cn(
-                "text-2xl font-bold",
-                Math.abs(result.total_variance_percent) > 30
-                  ? "text-amber-600"
-                  : "text-green-600"
-              )}
-            >
-              {formatPercent(result.total_variance_percent)}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Issues & Warnings */}
       {(result.critical_issues.length > 0 || result.warnings.length > 0) && (

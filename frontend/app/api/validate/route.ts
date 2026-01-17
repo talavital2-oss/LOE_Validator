@@ -629,19 +629,214 @@ function levenshteinDistance(str1: string, str2: string): number {
   return dp[m][n];
 }
 
+// Smart context-aware task matching
 function calculateSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0;
   
   const s1 = String(str1).toLowerCase().trim();
   const s2 = String(str2).toLowerCase().trim();
 
+  // Exact match
   if (s1 === s2) return 100;
 
-  const maxLen = Math.max(s1.length, s2.length);
-  if (maxLen === 0) return 100;
+  // Calculate multiple similarity scores and take the best
+  const scores: number[] = [];
 
-  const distance = levenshteinDistance(s1, s2);
-  return Math.round((1 - distance / maxLen) * 100);
+  // 1. Levenshtein-based similarity
+  const maxLen = Math.max(s1.length, s2.length);
+  if (maxLen > 0) {
+    const distance = levenshteinDistance(s1, s2);
+    scores.push(Math.round((1 - distance / maxLen) * 100));
+  }
+
+  // 2. Token-based similarity (word matching)
+  const tokenScore = calculateTokenSimilarity(s1, s2);
+  scores.push(tokenScore);
+
+  // 3. Semantic/concept similarity
+  const semanticScore = calculateSemanticSimilarity(s1, s2);
+  scores.push(semanticScore);
+
+  // 4. Key phrase matching
+  const phraseScore = calculatePhraseSimilarity(s1, s2);
+  scores.push(phraseScore);
+
+  // Return the highest score
+  return Math.max(...scores);
+}
+
+// Token-based similarity - matches individual words
+function calculateTokenSimilarity(s1: string, s2: string): number {
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'to', 'for', 'in', 'on', 'with', 'by', '&']);
+  
+  const tokenize = (s: string): string[] => {
+    return s.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 1 && !stopWords.has(word));
+  };
+
+  const tokens1 = tokenize(s1);
+  const tokens2 = tokenize(s2);
+
+  if (tokens1.length === 0 || tokens2.length === 0) return 0;
+
+  // Count matching tokens (including partial matches)
+  let matchCount = 0;
+  const usedTokens = new Set<number>();
+
+  for (const t1 of tokens1) {
+    let bestMatch = 0;
+    let bestIdx = -1;
+
+    for (let i = 0; i < tokens2.length; i++) {
+      if (usedTokens.has(i)) continue;
+      const t2 = tokens2[i];
+
+      // Exact match
+      if (t1 === t2) {
+        if (1 > bestMatch) {
+          bestMatch = 1;
+          bestIdx = i;
+        }
+      }
+      // One contains the other
+      else if (t1.includes(t2) || t2.includes(t1)) {
+        const score = 0.8;
+        if (score > bestMatch) {
+          bestMatch = score;
+          bestIdx = i;
+        }
+      }
+      // Similar words (Levenshtein)
+      else if (t1.length > 3 && t2.length > 3) {
+        const dist = levenshteinDistance(t1, t2);
+        const similarity = 1 - dist / Math.max(t1.length, t2.length);
+        if (similarity > 0.7 && similarity > bestMatch) {
+          bestMatch = similarity;
+          bestIdx = i;
+        }
+      }
+    }
+
+    if (bestIdx >= 0) {
+      matchCount += bestMatch;
+      usedTokens.add(bestIdx);
+    }
+  }
+
+  const totalTokens = Math.max(tokens1.length, tokens2.length);
+  return Math.round((matchCount / totalTokens) * 100);
+}
+
+// Semantic similarity using synonyms and related concepts
+function calculateSemanticSimilarity(s1: string, s2: string): number {
+  // Define semantic groups - generic IT/project terms that mean similar things
+  const semanticGroups: string[][] = [
+    // Action verbs
+    ['install', 'installation', 'deploy', 'deployment', 'setup', 'set up', 'provision', 'provisioning'],
+    ['configure', 'configuration', 'config', 'setup', 'set up', 'settings', 'customize'],
+    ['test', 'testing', 'validation', 'validate', 'verify', 'verification', 'qa', 'quality'],
+    ['kickoff', 'kick-off', 'kick off', 'project launch', 'initiation', 'start', 'beginning', 'intro'],
+    ['design', 'architecture', 'solution design', 'high level design', 'hld', 'blueprint'],
+    ['prerequisite', 'prerequisites', 'preparation', 'prepare', 'requirements', 'pre-requisite', 'prereq'],
+    ['production', 'prod', 'live', 'production environment', 'go-live', 'golive'],
+    ['implementation', 'implement', 'build', 'create', 'develop', 'development', 'construct'],
+    ['meeting', 'session', 'workshop', 'call', 'discussion', 'review session'],
+    ['migrate', 'migration', 'move', 'transfer', 'transition', 'convert', 'conversion'],
+    ['integrate', 'integration', 'connect', 'connection', 'interface', 'link'],
+    ['document', 'documentation', 'docs', 'guide', 'manual', 'runbook'],
+    ['train', 'training', 'education', 'knowledge transfer', 'kt', 'enablement', 'handover'],
+    ['support', 'assist', 'assistance', 'help', 'troubleshoot', 'troubleshooting'],
+    ['review', 'assess', 'assessment', 'evaluate', 'evaluation', 'audit', 'check'],
+    ['plan', 'planning', 'schedule', 'roadmap', 'strategy'],
+    // Environment types
+    ['hybrid', 'mixed', 'combined'],
+    ['cloud', 'saas', 'hosted', 'online'],
+    ['on-premise', 'on-prem', 'onprem', 'on premise', 'local', 'datacenter'],
+    // Components  
+    ['connector', 'connectors', 'agent', 'agents', 'adapter'],
+    ['appliance', 'ova', 'virtual appliance', 'vm', 'virtual machine'],
+    ['profile', 'profiles', 'policy', 'policies', 'rule', 'rules'],
+    ['server', 'servers', 'host', 'hosts', 'node', 'nodes'],
+    ['certificate', 'cert', 'certs', 'ssl', 'tls'],
+    ['authentication', 'auth', 'login', 'sso', 'identity'],
+    ['directory', 'ad', 'ldap', 'identity provider', 'idp'],
+    ['database', 'db', 'sql', 'data store'],
+    ['network', 'networking', 'firewall', 'connectivity'],
+    ['security', 'secure', 'hardening', 'protection'],
+    ['backup', 'restore', 'recovery', 'dr', 'disaster recovery'],
+    ['monitor', 'monitoring', 'alerting', 'observability', 'logging'],
+    ['update', 'upgrade', 'patch', 'patching'],
+    ['enroll', 'enrollment', 'onboard', 'onboarding', 'registration', 'register'],
+  ];
+
+  const s1Lower = s1.toLowerCase();
+  const s2Lower = s2.toLowerCase();
+
+  let matchedGroups = 0;
+  let totalGroups = 0;
+
+  for (const group of semanticGroups) {
+    const s1HasGroup = group.some(term => s1Lower.includes(term));
+    const s2HasGroup = group.some(term => s2Lower.includes(term));
+
+    if (s1HasGroup || s2HasGroup) {
+      totalGroups++;
+      if (s1HasGroup && s2HasGroup) {
+        matchedGroups++;
+      }
+    }
+  }
+
+  if (totalGroups === 0) return 0;
+  return Math.round((matchedGroups / totalGroups) * 100);
+}
+
+// Phrase-based similarity - looks for key action+subject combinations
+function calculatePhraseSimilarity(s1: string, s2: string): number {
+  const s1Lower = s1.toLowerCase();
+  const s2Lower = s2.toLowerCase();
+
+  // Extract action words (generic IT actions)
+  const actions = ['install', 'configure', 'deploy', 'setup', 'create', 'build', 'test', 'validate', 
+                   'prepare', 'design', 'review', 'integrate', 'migrate', 'implement', 'provision',
+                   'update', 'upgrade', 'backup', 'restore', 'monitor', 'enable', 'disable',
+                   'connect', 'register', 'enroll', 'train', 'document', 'plan', 'assess'];
+  
+  // Extract subject/object words (generic IT components)
+  const subjects = ['connector', 'profile', 'policy', 'appliance', 'environment', 'production',
+                    'certificate', 'authentication', 'server', 'database', 'network', 'firewall',
+                    'console', 'agent', 'hybrid', 'mobile', 'cloud', 'gateway', 'service',
+                    'application', 'app', 'user', 'device', 'system', 'infrastructure', 'platform',
+                    'security', 'backup', 'storage', 'cluster', 'node', 'endpoint', 'client'];
+
+  const getActions = (s: string): string[] => actions.filter(a => s.includes(a));
+  const getSubjects = (s: string): string[] => subjects.filter(sub => s.includes(sub));
+
+  const actions1 = getActions(s1Lower);
+  const actions2 = getActions(s2Lower);
+  const subjects1 = getSubjects(s1Lower);
+  const subjects2 = getSubjects(s2Lower);
+
+  // Match actions
+  const actionMatch = actions1.filter(a => actions2.includes(a)).length;
+  const actionTotal = Math.max(actions1.length, actions2.length, 1);
+  const actionScore = actionMatch / actionTotal;
+
+  // Match subjects
+  const subjectMatch = subjects1.filter(s => subjects2.includes(s)).length;
+  const subjectTotal = Math.max(subjects1.length, subjects2.length, 1);
+  const subjectScore = subjectMatch / subjectTotal;
+
+  // Combined score - both action and subject should match for high score
+  if (actionMatch > 0 && subjectMatch > 0) {
+    return Math.round(((actionScore + subjectScore) / 2) * 100);
+  } else if (actionMatch > 0 || subjectMatch > 0) {
+    return Math.round(((actionScore + subjectScore) / 2) * 60); // Partial match
+  }
+
+  return 0;
 }
 
 function detectTaskType(description: string): string {
@@ -715,8 +910,12 @@ function matchTasks(
   const matches: TaskMatch[] = [];
   const usedLoeIndices = new Set<number>();
 
+  console.log(`Matching ${sowTasks.length} SOW tasks against ${loeEntries.length} LOE entries`);
+
   for (const sowTask of sowTasks) {
     let bestMatch: { entry: LOEEntry; score: number; index: number } | null = null;
+
+    console.log(`\nMatching SOW task: "${sowTask.task}"`);
 
     for (let i = 0; i < loeEntries.length; i++) {
       if (usedLoeIndices.has(i)) continue;
@@ -724,9 +923,20 @@ function matchTasks(
       const loeEntry = loeEntries[i];
       const score = calculateSimilarity(sowTask.task, loeEntry.task);
 
-      if (score > 50 && (!bestMatch || score > bestMatch.score)) {
+      if (score >= 30) {
+        console.log(`  -> LOE "${loeEntry.task}" = ${score}%`);
+      }
+
+      // Lower threshold to 40% for smart matching (was 50%)
+      if (score >= 40 && (!bestMatch || score > bestMatch.score)) {
         bestMatch = { entry: loeEntry, score, index: i };
       }
+    }
+    
+    if (bestMatch) {
+      console.log(`  MATCHED: "${bestMatch.entry.task}" (${bestMatch.score}%)`);
+    } else {
+      console.log(`  NO MATCH FOUND`);
     }
 
     if (bestMatch) {
