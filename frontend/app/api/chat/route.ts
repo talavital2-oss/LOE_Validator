@@ -62,7 +62,7 @@ Help the user understand the validation results, identify issues, and provide re
     ];
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5.2",
       messages,
       max_tokens: 1000,
       temperature: 0.7,
